@@ -1,0 +1,4 @@
+Add more filters such as cuisine
+Add functionality for user seperation maybe using SQL tables
+Refine data for serving size
+Add better categorization
