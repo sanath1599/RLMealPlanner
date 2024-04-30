@@ -1,65 +1,49 @@
 import pandas as pd
 import re
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
-from sklearn.impute import SimpleImputer
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
+from sklearn.feature_extraction.text import TfidfVectorizer
 
-# Function to convert ISO 8601 duration to minutes
-def convert_duration_to_minutes(duration_str):
-    if pd.isna(duration_str):
-        return None  # Return None if value is NaN
-    match = re.match(r'P(?:(\d+)D)?T(?:(\d+)H)?(?:(\d+)M)?', duration_str)
-    days, hours, minutes = match.groups(default='0')
+def convert_iso8601_to_minutes(iso_str):
+    if pd.isna(iso_str):
+        return 0
+    pattern = re.compile(r'P(?:(\d+)D)?T(?:(\d+)H)?(?:(\d+)M)?')
+    parts = pattern.match(iso_str)
+    days, hours, minutes = parts.groups(default='0')
     return int(days) * 1440 + int(hours) * 60 + int(minutes)
 
-# Load your dataset
+# Load data
 data = pd.read_csv('recipes_trunc.csv')
 
-# Convert time columns from ISO 8601 format to minutes
-time_columns = ['CookTime', 'PrepTime', 'TotalTime']
-for col in time_columns:
-    data[col] = data[col].apply(convert_duration_to_minutes)
+# Convert time durations
+for col in ['CookTime', 'PrepTime', 'TotalTime']:
+    data[col] = data[col].apply(convert_iso8601_to_minutes)
 
-# Columns that are not necessary for model training (change as needed)
-columns_to_drop = ['AuthorId', 'AuthorName', 'DatePublished', 'Images', 'ReviewCount']
-data.drop(columns=columns_to_drop, inplace=True)
+# Extract and clean categories and ingredients using regex that captures strings in double quotes
+def extract_text(column):
+    return column.str.extractall(r'"([^"]+)"').groupby(level=0).agg(' '.join).reindex(column.index, fill_value='')
 
-# Define numerical and categorical columns for further processing
-numerical_columns = ['CookTime', 'PrepTime', 'TotalTime', 'AggregatedRating', 
-                     'FatContent', 'SaturatedFatContent', 'CholesterolContent',
-                     'SodiumContent', 'CarbohydrateContent', 'FiberContent', 'SugarContent', 'ProteinContent']
-categorical_columns = ['RecipeCategory', 'Keywords']
+data['CombinedIngredients'] = extract_text(data['RecipeIngredientParts'])
+data['RecipeCategory'] = extract_text(data['RecipeCategory'])
 
-# Make sure 'Calories' is retained and not processed in ColumnTransformer
-necessary_columns = ['RecipeId', 'Name', 'Description', 'RecipeInstructions', 'Calories']
+# Ensure all text data is string and non-empty for TF-IDF
+data['CombinedIngredients'] = data['CombinedIngredients'].fillna('').astype(str)
+data['RecipeCategory'] = data['RecipeCategory'].fillna('').astype(str)
 
-# Define transformations for numerical and categorical data
-numerical_transformer = Pipeline(steps=[
-    ('imputer', SimpleImputer(strategy='mean')),
-    ('scaler', StandardScaler())
-])
+# Only proceed with TF-IDF if there is any non-empty data
+if data['RecipeCategory'].str.strip().eq('').all():
+    print("Warning: No valid category data available for TF-IDF vectorization.")
+else:
+    tfidf_vectorizer = TfidfVectorizer(max_features=100, stop_words='english')
+    categories_tfidf = tfidf_vectorizer.fit_transform(data['RecipeCategory'])
+    categories_df = pd.DataFrame(categories_tfidf.toarray(), columns=['cat_' + str(i) for i in range(categories_tfidf.shape[1])])
+    data = pd.concat([data, categories_df], axis=1)
 
-categorical_transformer = Pipeline(steps=[
-    ('imputer', SimpleImputer(strategy='constant', fill_value='missing')),
-    ('onehot', OneHotEncoder(handle_unknown='ignore'))
-])
+if data['CombinedIngredients'].str.strip().eq('').all():
+    print("Warning: No valid ingredients data available for TF-IDF vectorization.")
+else:
+    tfidf_vectorizer = TfidfVectorizer(max_features=100, stop_words='english')
+    ingredients_tfidf = tfidf_vectorizer.fit_transform(data['CombinedIngredients'])
+    ingredients_df = pd.DataFrame(ingredients_tfidf.toarray(), columns=['ingr_' + str(i) for i in range(ingredients_tfidf.shape[1])])
+    data = pd.concat([data, ingredients_df], axis=1)
 
-# Bundle preprocessing for numerical and categorical data
-preprocessor = ColumnTransformer(
-    transformers=[
-        ('num', numerical_transformer, numerical_columns),
-        ('cat', categorical_transformer, categorical_columns)
-    ])
-
-# Apply transformations
-transformed_data = preprocessor.fit_transform(data)
-transformed_columns = numerical_columns + list(preprocessor.named_transformers_['cat'].named_steps['onehot'].get_feature_names_out())
-
-# Combine with necessary text data and Calories
-data_preprocessed = pd.DataFrame(transformed_data.toarray(), columns=transformed_columns, index=data.index)
-for column in necessary_columns:
-    data_preprocessed[column] = data[column]
-
-# Save the processed data if necessary
-data_preprocessed.to_csv('processed_meal_data.csv', index=False)
+# Save processed data
+data.to_csv('processed_meal_data.csv', index=False)
