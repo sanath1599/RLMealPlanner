@@ -35,7 +35,6 @@ def epsilon_greedy_policy(q_values, state, epsilon=0.1):
 
     Returns:
     - action (int): The selected action.
-
     """
     if np.random.rand() < epsilon:
         return np.random.randint(0, q_values.shape[1])
@@ -284,7 +283,7 @@ while True:
     recommended_meals, meal_ids = recommend_meals(data, q_table, num_meals, last_5_meals, meal_calories)
     print("Recommended Meals for Today:")
     print(recommended_meals[['Name', 'Calories', 'RecipeInstructions']])
-    plot_calorie_differences(recommended_meals)
+    # plot_calorie_differences(recommended_meals)
     if len(last_5_meals) >= 10:
             last_5_meals = last_5_meals[-4:]
     last_5_meals.extend(meal_ids)
