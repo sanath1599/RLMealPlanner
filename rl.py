@@ -175,13 +175,12 @@ def recommend_meals(data, q_table, num_meals, last_meals, meal_calories):
         valid_indices = [idx for idx in valid_indices if idx < q_table.shape[0]]
 
         if not valid_indices:
-            valid_indices = list(data.index)[:q_table.shape[0]]  # Limit to within Q-table size
+            valid_indices = list(data.index)[:q_table.shape[0]] 
         
         recommended_indices = np.argsort(-q_table[valid_indices, :].mean(axis=0))[:num_meals]
-        recommended_meals = valid_data.iloc[recommended_indices]  # Use iloc to access rows by position
+        recommended_meals = valid_data.iloc[recommended_indices]
         recommendations.append(recommended_meals)
         meal_ids.extend(recommended_meals['RecipeId'].tolist())
-        print("Hello")
         # valid_data.drop(recommended_indices, inplace=True)
     recommended_meals = pd.concat(recommendations)[:num_meals]
     return recommended_meals, meal_ids
@@ -232,7 +231,6 @@ def plot_q_table(q_table):
     plt.grid(True)
     plt.show()
 
-# Distribution of calorie differences for recommended meals
 def plot_calorie_differences(valid_data):
     """
     Plot the distribution of calorie differences.
@@ -251,7 +249,6 @@ def plot_calorie_differences(valid_data):
     plt.grid(True)
     plt.show()
 
-# User feedback distribution
 def plot_user_feedback(feedback):
     """
     Plots the distribution of user feedback.
@@ -275,7 +272,7 @@ data = pd.read_csv('processed_meal_data.csv')
 tfidf_columns = [col for col in data.columns if col.startswith('ingr_')]
 feature_matrix = data[tfidf_columns].values
 similarity_matrix = cosine_similarity(feature_matrix)
-num_actions = data.shape[0]  # or any other method to determine the number of unique meals
+num_actions = data.shape[0] 
 q_table = load_q_table('q_table.csv', num_actions)
 q_table_orig= q_table.copy()
 
@@ -286,11 +283,12 @@ meal_calories = calculate_meal_calories(num_meals, total_calories)
 while True:
     recommended_meals, meal_ids = recommend_meals(data, q_table, num_meals, last_5_meals, meal_calories)
     print("Recommended Meals for Today:")
-    print(recommended_meals[['Name', 'Calories', 'Description']])
+    print(recommended_meals[['Name', 'Calories', 'RecipeInstructions']])
     plot_calorie_differences(recommended_meals)
     if len(last_5_meals) >= 10:
             last_5_meals = last_5_meals[-4:]
     last_5_meals.extend(meal_ids)
+    
     save_last_meals(last_5_meals)
     load_last_meals()
     if request_new_meal():
